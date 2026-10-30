@@ -25,11 +25,19 @@ div[data-testid="stMetric"] { background: #101f32; border: 1px solid #243a53; pa
 """, unsafe_allow_html=True)
 
 st.markdown("""
+```python
+st.markdown("""
 <div class="hero">
   <div class="eyebrow">Molecular intelligence workspace</div>
   <h1>⚛️ Cheminformatics</h1>
   <p>Discover compounds and elements in interactive 2D and 3D.</p>
+  <hr style="border-color:#20344d;">
+  <p><b>Student Name:</b> RATHIESH D</p>
+  <p><b>Registration Number:</b> RE2611026050338</p>
 </div>
+""", unsafe_allow_html=True)
+```
+
 """, unsafe_allow_html=True)
 
 pt = Chem.GetPeriodicTable()
