@@ -1,848 +1,503 @@
-
+```python
 import streamlit as st
 import pandas as pd
-import requests
-from rdkit import Chem
-from rdkit.Chem import Descriptors, Draw, rdMolDescriptors, AllChem
-import streamlit.components.v1 as components
 
-# --------------------------------------------------
+# -----------------------------------
 # PAGE CONFIGURATION
-# --------------------------------------------------
-
+# -----------------------------------
 st.set_page_config(
-    page_title="Cheminformatics | 2D + 3D Lab",
+    page_title="Cheminformatics | Molecular Workspace",
     page_icon="⚛️",
-    layout="wide"
+    layout="wide",
+    initial_sidebar_state="expanded"
 )
 
-# --------------------------------------------------
-# STUDENT DETAILS
-# --------------------------------------------------
-
-STUDENT_NAME = "RATHIESH D"
-REGISTRATION_NUMBER = "RE2611026050338"
-
-# --------------------------------------------------
+# -----------------------------------
 # CUSTOM CSS
-# --------------------------------------------------
-
+# -----------------------------------
 st.markdown("""
 <style>
 .stApp {
-    background: linear-gradient(
-        135deg,
-        #07111f 0%,
-        #0b1728 55%,
-        #101e32 100%
-    );
-    color: #edf4ff;
+    background: linear-gradient(135deg, #07111f, #0b1728, #101f33);
+    color: #e8f0ff;
 }
 
-[data-testid="stSidebar"] {
-    background: #0a1423;
+.block-container {
+    padding-top: 2rem;
+    padding-bottom: 2rem;
+    max-width: 1400px;
 }
 
 .hero {
-    padding: 1.7rem;
-    border: 1px solid #20344d;
-    border-radius: 18px;
-    background: linear-gradient(120deg, #10243a, #0b1728);
-    margin-bottom: 1.5rem;
+    padding: 35px;
+    border-radius: 22px;
+    background: linear-gradient(120deg, #14243a, #1b3150);
+    border: 1px solid #294563;
+    box-shadow: 0 10px 35px rgba(0, 0, 0, 0.25);
+    margin-bottom: 25px;
 }
 
 .eyebrow {
-    color: #63e6be;
+    color: #52e0c4;
+    font-size: 13px;
     text-transform: uppercase;
-    letter-spacing: 0.16em;
-    font-size: 0.75rem;
-    font-weight: 700;
+    letter-spacing: 3px;
+    font-weight: bold;
 }
 
 .hero h1 {
-    margin: 0.4rem 0;
-    color: #f4f8ff;
-    font-size: 2.5rem;
+    font-size: 48px;
+    color: #ffffff;
+    margin-bottom: 10px;
 }
 
 .hero p {
-    color: #b8c8dc;
+    color: #c2d2e8;
+    font-size: 16px;
 }
 
 .student-card {
-    background: #101f32;
-    border: 1px solid #29435f;
+    background: #12243a;
+    padding: 18px;
     border-radius: 14px;
-    padding: 1rem;
-    margin-top: 1rem;
+    border: 1px solid #294563;
+    margin-top: 20px;
 }
 
-.student-card p {
-    margin: 0.4rem 0;
+.section-card {
+    background: #112138;
+    padding: 22px;
+    border-radius: 16px;
+    border: 1px solid #263e59;
+    margin-bottom: 15px;
+}
+
+.small-label {
+    color: #52e0c4;
+    font-size: 13px;
+    font-weight: bold;
+    text-transform: uppercase;
+    letter-spacing: 1px;
 }
 
 div[data-testid="stMetric"] {
-    background: #101f32;
-    border: 1px solid #243a53;
-    padding: 1rem;
+    background: #12243a;
+    border: 1px solid #294563;
+    padding: 18px;
     border-radius: 14px;
 }
 
-.stTabs [data-baseweb="tab"] {
-    color: #edf4ff;
+h2, h3 {
+    color: #ffffff;
 }
 
+.stButton > button {
+    border-radius: 10px;
+    border: 1px solid #52e0c4;
+    background: #17374a;
+    color: white;
+    font-weight: bold;
+}
+
+.stButton > button:hover {
+    background: #24576a;
+    color: white;
+    border-color: #52e0c4;
+}
+
+footer {
+    visibility: hidden;
+}
 </style>
 """, unsafe_allow_html=True)
 
-# --------------------------------------------------
-# WEBSITE HEADER
-# --------------------------------------------------
-
-st.markdown(f"""
-<div class="hero">
-    <div class="eyebrow">
-        Molecular Intelligence Workspace
-    </div>
-
-    <h1>⚛️ Cheminformatics</h1>
-
-    <p>
-        Discover compounds and elements in interactive
-        2D and 3D molecular visualizations.
-    </p>
-
-    <div class="student-card">
-        <p><b>Student Name:</b> {STUDENT_NAME}</p>
-        <p><b>Registration Number:</b> {REGISTRATION_NUMBER}</p>
-    </div>
-</div>
-""", unsafe_allow_html=True)
-
-# --------------------------------------------------
-# PERIODIC TABLE
-# --------------------------------------------------
-
-pt = Chem.GetPeriodicTable()
-
-# --------------------------------------------------
-# PUBCHEM COMPOUND SEARCH
-# --------------------------------------------------
-
-def pubchem_lookup(query):
-    """Find compound information using PubChem."""
-
-    url = (
-        "https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/name/"
-        f"{requests.utils.quote(query)}/property/"
-        "CanonicalSMILES,IUPACName/JSON"
-    )
-
-    try:
-        response = requests.get(url, timeout=15)
-
-        if response.ok:
-            properties = response.json()[
-                "PropertyTable"
-            ]["Properties"][0]
-
-            smiles = properties.get("ConnectivitySMILES")
-            if not smiles:
-                smiles = properties.get("CanonicalSMILES")
-
-            iupac_name = properties.get("IUPACName", "")
-
-            return smiles, iupac_name
-
-    except (requests.RequestException, ValueError, KeyError, IndexError):
-        pass
-
-    return None, ""
-
-
-# --------------------------------------------------
-# GENERATE 3D MOLECULAR STRUCTURE
-# --------------------------------------------------
-
-def build_3d(mol):
-    """Generate a computational 3D molecular conformation."""
-
-    mol3d = Chem.AddHs(Chem.Mol(mol))
-
-    params = AllChem.ETKDGv3()
-    params.randomSeed = 2026
-
-    result = AllChem.EmbedMolecule(mol3d, params)
-
-    if result != 0:
-        return None, None
-
-    try:
-        optimization_result = AllChem.MMFFOptimizeMolecule(
-            mol3d,
-            maxIters=200
-        )
-
-        if optimization_result == -1:
-            AllChem.UFFOptimizeMolecule(mol3d, maxIters=200)
-
-    except Exception:
-        try:
-            AllChem.UFFOptimizeMolecule(mol3d, maxIters=200)
-        except Exception:
-            pass
-
-    mol_block = Chem.MolToMolBlock(mol3d)
-
-    return mol3d, mol_block
-
-
-# --------------------------------------------------
-# INTERACTIVE 3D VIEWER
-# --------------------------------------------------
-
-def show_3d(mol_block, height=470):
-
-    # JSON encoding safely transfers the molecule data into JavaScript.
-    import json
-
-    molecule_json = json.dumps(mol_block)
-
-    html = f"""
-    <div
-        id="molecule-viewer"
-        style="
-            width:100%;
-            height:{height}px;
-            position:relative;
-            border-radius:14px;
-            overflow:hidden;
-        ">
-    </div>
-
-    <script src="https://3Dmol.org/build/3Dmol-min.js"></script>
-
-    <script>
-        (function() {{
-            const element =
-                document.getElementById("molecule-viewer");
-
-            function initializeViewer() {{
-                if (!window.$3Dmol) {{
-                    element.innerHTML =
-                        "<p style='color:white;padding:20px;'>"
-                        + "3D viewer could not load. "
-                        + "Check your internet connection."
-                        + "</p>";
-                    return;
-                }}
-
-                const viewer = $3Dmol.createViewer(element, {{
-                    backgroundColor: "#0b1728"
-                }});
-
-                viewer.addModel({molecule_json}, "mol");
-
-                viewer.setStyle({{}}, {{
-                    stick: {{ radius: 0.16 }},
-                    sphere: {{ scale: 0.23 }}
-                }});
-
-                viewer.zoomTo();
-                viewer.render();
-            }}
-
-            if (window.$3Dmol) {{
-                initializeViewer();
-            }} else {{
-                const script =
-                    document.querySelector(
-                        'script[src*="3Dmol-min.js"]'
-                    );
-
-                if (script) {{
-                    script.addEventListener(
-                        "load",
-                        initializeViewer,
-                        {{ once: true }}
-                    );
-                }}
-            }}
-        }})();
-    </script>
-    """
-
-    components.html(
-        html,
-        height=height + 20,
-        scrolling=False
-    )
-
-
-# --------------------------------------------------
+# -----------------------------------
 # SIDEBAR
-# --------------------------------------------------
+# -----------------------------------
+st.sidebar.markdown("# ⚛️ ChemLab")
+st.sidebar.caption("Molecular Intelligence Workspace")
+st.sidebar.divider()
 
-with st.sidebar:
+page = st.sidebar.radio(
+    "NAVIGATION",
+    [
+        "Home",
+        "Periodic Table",
+        "Molecular Calculator",
+        "About"
+    ]
+)
 
-    st.markdown("## ⚛️ Cheminformatics")
+st.sidebar.divider()
+st.sidebar.markdown("### Student Profile")
+st.sidebar.write("**Name:** RATHIESH D")
+st.sidebar.write("**Register No.:** RE2611026050338")
+st.sidebar.caption("Cheminformatics Project")
 
-    st.markdown("---")
-
-    st.markdown("### Student Details")
-
-    st.write(f"**Name:** {STUDENT_NAME}")
-
-    st.write(f"**Reg. No.:** {REGISTRATION_NUMBER}")
-
-    st.markdown("---")
-
-    page = st.radio(
-        "Workspace",
-        [
-            "2D + 3D Explorer",
-            "About"
-        ]
-    )
-
-    st.markdown("---")
-
-    st.caption("Compound information: PubChem")
-
-    st.caption("Molecular calculations: RDKit")
-
-    st.caption("3D visualization: 3Dmol.js")
-
-
-# --------------------------------------------------
-# ABOUT PAGE
-# --------------------------------------------------
-
-if page == "About":
-
-    st.title("About Cheminformatics")
-
-    st.write(
-        "Cheminformatics combines chemistry, computer science, "
-        "and data analysis to study and understand chemical compounds."
-    )
-
-    st.markdown("### Student Information")
-
-    st.info(
-        f"Student Name: {STUDENT_NAME}\n\n"
-        f"Registration Number: {REGISTRATION_NUMBER}"
-    )
-
-    st.markdown("### Features")
+# -----------------------------------
+# HOME PAGE
+# -----------------------------------
+if page == "Home":
 
     st.markdown("""
-    - Explore 2D molecular structures.
-    - Generate and inspect computational 3D conformations.
-    - Search for chemical compounds using PubChem.
-    - Calculate common molecular descriptors.
-    - Explore elements and their atomic properties.
-    - Download molecular structures and property reports.
-    """)
-
-    st.warning(
-        "Generated 3D structures are computational models. "
-        "They are not necessarily experimentally determined structures."
-    )
-
-    st.markdown("---")
-
-    st.caption(
-        f"Created by {STUDENT_NAME} | "
-        f"Registration Number: {REGISTRATION_NUMBER}"
-    )
-
-    st.stop()
-
-
-# --------------------------------------------------
-# MAIN EXPLORER
-# --------------------------------------------------
-
-st.subheader("Explore a Compound or Element")
-
-mode = st.radio(
-    "Choose what you want to explore:",
-    ["Chemical Compound", "Element"],
-    horizontal=True
-)
-
-
-# ==================================================
-# CHEMICAL COMPOUND EXPLORER
-# ==================================================
-
-if mode == "Chemical Compound":
-
-    source = st.radio(
-        "Input method",
-        ["Compound Name", "SMILES Notation"],
-        horizontal=True
-    )
-
-    smiles = ""
-    compound_name = ""
-    iupac_name = ""
-
-    # ----------------------------------------------
-    # INPUT BY COMPOUND NAME
-    # ----------------------------------------------
-
-    if source == "Compound Name":
-
-        query = st.text_input(
-            "Enter compound name",
-            value="aspirin",
-            placeholder="e.g. caffeine, glucose, ibuprofen"
-        )
-
-        if st.button(
-            "🔍 Find and Visualize",
-            type="primary"
-        ):
-
-            if not query.strip():
-
-                st.error("Please enter a compound name.")
-
-            else:
-
-                with st.spinner("Searching PubChem..."):
-
-                    found_smiles, found_iupac = pubchem_lookup(
-                        query.strip()
-                    )
-
-                if found_smiles:
-
-                    st.session_state["compound_smiles"] = found_smiles
-
-                    st.session_state["compound_name"] = query.strip()
-
-                    st.session_state["compound_iupac"] = found_iupac
-
-                else:
-
-                    st.error(
-                        "Compound not found. Check the spelling "
-                        "or try another compound name."
-                    )
-
-        smiles = st.session_state.get(
-            "compound_smiles",
-            "CC(=O)Oc1ccccc1C(=O)O"
-        )
-
-        compound_name = st.session_state.get(
-            "compound_name",
-            "aspirin"
-        )
-
-        iupac_name = st.session_state.get(
-            "compound_iupac",
-            ""
-        )
-
-        if "compound_smiles" not in st.session_state:
-
-            st.caption(
-                "Default example: Aspirin. Enter a name and "
-                "click Find and Visualize to search."
-            )
-
-    # ----------------------------------------------
-    # INPUT BY SMILES
-    # ----------------------------------------------
-
-    else:
-
-        smiles = st.text_input(
-            "Enter SMILES notation",
-            value="CC(=O)Oc1ccccc1C(=O)O",
-            help="Example: CCO represents ethanol."
-        )
-
-        compound_name = "Custom SMILES"
-
-        iupac_name = ""
-
-    # ----------------------------------------------
-    # PARSE MOLECULE
-    # ----------------------------------------------
-
-    mol = Chem.MolFromSmiles(smiles) if smiles else None
-
-    if mol is None:
-
-        st.error(
-            "Invalid SMILES notation. Please check the input."
-        )
-
-    else:
-
-        canonical_smiles = Chem.MolToSmiles(mol)
-
-        st.markdown(
-            f"### 🧬 {compound_name.title()}"
-        )
-
-        if iupac_name:
-
-            st.caption(f"IUPAC Name: {iupac_name}")
-
-        tab2d, tab3d, tabdata = st.tabs([
-            "🧬 2D Structure",
-            "🪐 Interactive 3D",
-            "📊 Molecular Properties"
-        ])
-
-        # ==========================================
-        # 2D STRUCTURE
-        # ==========================================
-
-        with tab2d:
-
-            col1, col2 = st.columns([1.2, 1])
-
-            with col1:
-
-                st.image(
-                    Draw.MolToImage(
-                        mol,
-                        size=(650, 440)
-                    ),
-                    use_container_width=True
-                )
-
-            with col2:
-
-                st.markdown("#### Structure Details")
-
-                st.write("**Canonical SMILES**")
-
-                st.code(canonical_smiles)
-
-                st.metric(
-                    "Heavy Atoms",
-                    mol.GetNumHeavyAtoms()
-                )
-
-                st.metric(
-                    "Number of Rings",
-                    rdMolDescriptors.CalcNumRings(mol)
-                )
-
-                st.metric(
-                    "Total Atoms (without added hydrogens)",
-                    mol.GetNumAtoms()
-                )
-
-                st.download_button(
-                    "📥 Download 2D Structure (PNG)",
-                    data=Draw.MolToImage(
-                        mol,
-                        size=(900, 650)
-                    ).save_to_bytes("PNG"),
-                    file_name="molecule_2d.png",
-                    mime="image/png"
-                )
-
-        # ==========================================
-        # 3D STRUCTURE
-        # ==========================================
-
-        with tab3d:
-
-            st.markdown(
-                "Rotate the molecular model with your mouse. "
-                "Use the mouse wheel to zoom."
-            )
-
-            with st.spinner(
-                "Generating a 3D molecular conformation..."
-            ):
-
-                try:
-
-                    mol3d, mol_block = build_3d(mol)
-
-                except Exception:
-
-                    mol3d, mol_block = None, None
-
-            if mol_block:
-
-                show_3d(mol_block)
-
-                st.download_button(
-                    "📥 Download 3D Structure (.mol)",
-                    data=mol_block,
-                    file_name="molecule_3d.mol",
-                    mime="chemical/x-mdl-molfile"
-                )
-
-            else:
-
-                st.warning(
-                    "A 3D conformation could not be generated "
-                    "for this molecule."
-                )
-
-        # ==========================================
-        # MOLECULAR PROPERTIES
-        # ==========================================
-
-        with tabdata:
-
-            properties = {
-                "Molecular Weight (g/mol)": round(
-                    Descriptors.MolWt(mol), 3
-                ),
-
-                "Exact Molecular Weight (Da)": round(
-                    Descriptors.ExactMolWt(mol), 4
-                ),
-
-                "Calculated LogP": round(
-                    Descriptors.MolLogP(mol), 3
-                ),
-
-                "TPSA (Å²)": round(
-                    rdMolDescriptors.CalcTPSA(mol), 3
-                ),
-
-                "Hydrogen Bond Donors": int(
-                    rdMolDescriptors.CalcNumHBD(mol)
-                ),
-
-                "Hydrogen Bond Acceptors": int(
-                    rdMolDescriptors.CalcNumHBA(mol)
-                ),
-
-                "Rotatable Bonds": int(
-                    rdMolDescriptors.CalcNumRotatableBonds(mol)
-                ),
-
-                "Heavy Atoms": int(
-                    mol.GetNumHeavyAtoms()
-                ),
-
-                "Aromatic Rings": int(
-                    rdMolDescriptors.CalcNumAromaticRings(mol)
-                ),
-
-                "Total Rings": int(
-                    rdMolDescriptors.CalcNumRings(mol)
-                )
-            }
-
-            properties_df = pd.DataFrame(
-                [
-                    {"Property": key, "Value": value}
-                    for key, value in properties.items()
-                ]
-            )
-
-            st.dataframe(
-                properties_df,
-                hide_index=True,
-                use_container_width=True
-            )
-
-            export_df = pd.DataFrame([
-                {
-                    "Compound Name": compound_name,
-                    "Input SMILES": smiles,
-                    "Canonical SMILES": canonical_smiles,
-                    **properties
-                }
-            ])
-
-            st.download_button(
-                "📥 Download Properties (CSV)",
-                data=export_df.to_csv(
-                    index=False
-                ).encode("utf-8"),
-                file_name="molecule_properties.csv",
-                mime="text/csv"
-            )
-
-            st.caption(
-                "Calculated descriptors are computational estimates. "
-                "They do not establish biological activity, safety, "
-                "or medical suitability."
-            )
-
-
-# ==================================================
-# ELEMENT EXPLORER
-# ==================================================
-
-else:
-
-    st.write(
-        "Select a chemical element to view its basic atomic properties."
-    )
-
-    element_symbols = [
-        pt.GetElementSymbol(i)
-        for i in range(1, 119)
-    ]
-
-    symbol = st.selectbox(
-        "Select an element",
-        element_symbols,
-        index=5
-    )
-
-    atomic_number = pt.GetAtomicNumber(symbol)
-
-    element_name = pt.GetElementName(atomic_number)
-
-    atomic_mass = pt.GetAtomicWeight(atomic_number)
-
-    col1, col2 = st.columns([1, 1.25])
+    <div class="hero">
+        <div class="eyebrow">Molecular intelligence workspace</div>
+        <h1>⚛️ Cheminformatics</h1>
+        <p>Discover compounds and elements in interactive 2D and 3D.</p>
+        <hr style="border-color:#20344d;">
+        <div class="student-card">
+            <p><b>Student Name:</b> RATHIESH D</p>
+            <p><b>Registration Number:</b> RE2611026050338</p>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    st.subheader("Explore Your Chemistry Workspace")
+
+    col1, col2, col3 = st.columns(3)
 
     with col1:
+        st.markdown("""
+        <div class="section-card">
+            <div class="small-label">MODULE 01</div>
+            <h3>🧪 Periodic Table</h3>
+            <p>Explore chemical elements, atomic numbers,
+            symbols, and atomic masses.</p>
+        </div>
+        """, unsafe_allow_html=True)
 
-        st.markdown(
-            f"### ⚛️ {element_name} ({symbol})"
-        )
-
-        st.metric(
-            "Atomic Number",
-            atomic_number
-        )
-
-        st.metric(
-            "Atomic Mass",
-            f"{atomic_mass:.4f} u"
-        )
-
-        st.info(
-            "The 3D sphere is illustrative. It does not represent "
-            "the true atomic scale, electron orbitals, or electron "
-            "probability distribution."
-        )
-
-        element_data = pd.DataFrame([
-            {
-                "Element": element_name,
-                "Symbol": symbol,
-                "Atomic Number": atomic_number,
-                "Atomic Mass (u)": atomic_mass
-            }
-        ])
-
-        st.download_button(
-            "📥 Download Element Data (CSV)",
-            data=element_data.to_csv(
-                index=False
-            ).encode("utf-8"),
-            file_name=f"{symbol}_element_data.csv",
-            mime="text/csv"
-        )
+        if st.button("Explore Elements", use_container_width=True):
+            st.session_state["page"] = "Periodic Table"
+            st.info("Select Periodic Table from the sidebar.")
 
     with col2:
-
-        import json
-
-        xyz_data = (
-            f"1\n"
-            f"{symbol} illustrative atom\n"
-            f"{symbol} 0.0 0.0 0.0\n"
-        )
-
-        xyz_json = json.dumps(xyz_data)
-
-        html = f"""
-        <div
-            id="atom-viewer"
-            style="
-                width:100%;
-                height:430px;
-                border-radius:14px;
-                overflow:hidden;
-            ">
+        st.markdown("""
+        <div class="section-card">
+            <div class="small-label">MODULE 02</div>
+            <h3>🧬 Molecular Calculator</h3>
+            <p>Calculate approximate molecular masses
+            using chemical formulas.</p>
         </div>
+        """, unsafe_allow_html=True)
 
-        <script src="https://3Dmol.org/build/3Dmol-min.js"></script>
+        if st.button("Calculate Mass", use_container_width=True):
+            st.info("Select Molecular Calculator from the sidebar.")
 
-        <script>
-            (function() {{
-                const element =
-                    document.getElementById("atom-viewer");
+    with col3:
+        st.markdown("""
+        <div class="section-card">
+            <div class="small-label">MODULE 03</div>
+            <h3>🔬 Research Workspace</h3>
+            <p>Learn about cheminformatics and
+            computer-assisted chemical research.</p>
+        </div>
+        """, unsafe_allow_html=True)
 
-                function initializeAtomViewer() {{
-                    if (!window.$3Dmol) {{
-                        element.innerHTML =
-                            "<p style='color:white;padding:20px;'>"
-                            + "3D viewer unavailable. Check your "
-                            + "internet connection."
-                            + "</p>";
-                        return;
-                    }}
+        if st.button("About Project", use_container_width=True):
+            st.info("Select About from the sidebar.")
 
-                    const viewer = $3Dmol.createViewer(element, {{
-                        backgroundColor: "#0b1728"
-                    }});
+    st.subheader("Workspace Overview")
 
-                    viewer.addModel({xyz_json}, "xyz");
+    col1, col2, col3 = st.columns(3)
 
-                    viewer.setStyle({{}}, {{
-                        sphere: {{ scale: 1.7 }}
-                    }});
+    col1.metric("Project", "Cheminformatics")
+    col2.metric("Core Modules", "2")
+    col3.metric("Workspace", "Interactive")
 
-                    viewer.zoomTo();
-                    viewer.render();
-                }}
+    st.markdown("""
+    <div class="section-card">
+        <h3>🎯 Project Objective</h3>
+        <p>
+        This project introduces cheminformatics through chemical
+        element exploration, molecular mass calculations, and
+        digital chemistry tools.
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
 
-                if (window.$3Dmol) {{
-                    initializeAtomViewer();
-                }} else {{
-                    const script = document.querySelector(
-                        'script[src*="3Dmol-min.js"]'
-                    );
+# -----------------------------------
+# PERIODIC TABLE PAGE
+# -----------------------------------
+elif page == "Periodic Table":
 
-                    if (script) {{
-                        script.addEventListener(
-                            "load",
-                            initializeAtomViewer,
-                            {{ once: true }}
-                        );
-                    }}
-                }}
-            }})();
-        </script>
-        """
+    st.markdown("""
+    <div class="hero">
+        <div class="eyebrow">Chemical element explorer</div>
+        <h1>🧪 Periodic Table</h1>
+        <p>Search and explore common chemical elements.</p>
+    </div>
+    """, unsafe_allow_html=True)
 
-        components.html(
-            html,
-            height=450,
-            scrolling=False
-        )
+    elements = [
+        {"Atomic Number": 1, "Symbol": "H", "Element": "Hydrogen", "Atomic Mass": 1.008},
+        {"Atomic Number": 2, "Symbol": "He", "Element": "Helium", "Atomic Mass": 4.0026},
+        {"Atomic Number": 3, "Symbol": "Li", "Element": "Lithium", "Atomic Mass": 6.94},
+        {"Atomic Number": 4, "Symbol": "Be", "Element": "Beryllium", "Atomic Mass": 9.0122},
+        {"Atomic Number": 5, "Symbol": "B", "Element": "Boron", "Atomic Mass": 10.81},
+        {"Atomic Number": 6, "Symbol": "C", "Element": "Carbon", "Atomic Mass": 12.011},
+        {"Atomic Number": 7, "Symbol": "N", "Element": "Nitrogen", "Atomic Mass": 14.007},
+        {"Atomic Number": 8, "Symbol": "O", "Element": "Oxygen", "Atomic Mass": 15.999},
+        {"Atomic Number": 9, "Symbol": "F", "Element": "Fluorine", "Atomic Mass": 18.998},
+        {"Atomic Number": 10, "Symbol": "Ne", "Element": "Neon", "Atomic Mass": 20.180},
+        {"Atomic Number": 11, "Symbol": "Na", "Element": "Sodium", "Atomic Mass": 22.990},
+        {"Atomic Number": 12, "Symbol": "Mg", "Element": "Magnesium", "Atomic Mass": 24.305},
+        {"Atomic Number": 13, "Symbol": "Al", "Element": "Aluminium", "Atomic Mass": 26.982},
+        {"Atomic Number": 14, "Symbol": "Si", "Element": "Silicon", "Atomic Mass": 28.085},
+        {"Atomic Number": 15, "Symbol": "P", "Element": "Phosphorus", "Atomic Mass": 30.974},
+        {"Atomic Number": 16, "Symbol": "S", "Element": "Sulfur", "Atomic Mass": 32.06},
+        {"Atomic Number": 17, "Symbol": "Cl", "Element": "Chlorine", "Atomic Mass": 35.45},
+        {"Atomic Number": 18, "Symbol": "Ar", "Element": "Argon", "Atomic Mass": 39.948},
+        {"Atomic Number": 19, "Symbol": "K", "Element": "Potassium", "Atomic Mass": 39.098},
+        {"Atomic Number": 20, "Symbol": "Ca", "Element": "Calcium", "Atomic Mass": 40.078}
+    ]
 
+    df = pd.DataFrame(elements)
 
-# --------------------------------------------------
+    search = st.text_input(
+        "Search by element name or symbol",
+        placeholder="Example: Carbon or C"
+    )
+
+    if search:
+        df = df[
+            df["Element"].str.contains(search, case=False, na=False)
+            | df["Symbol"].str.contains(search, case=False, na=False)
+        ]
+
+    st.dataframe(df, use_container_width=True, hide_index=True)
+
+    selected_symbol = st.selectbox(
+        "Choose an element for details",
+        [item["Symbol"] for item in elements]
+    )
+
+    selected = next(
+        item for item in elements
+        if item["Symbol"] == selected_symbol
+    )
+
+    st.markdown(f"""
+    <div class="section-card">
+        <div class="small-label">ELEMENT DETAILS</div>
+        <h1>{selected["Symbol"]}</h1>
+        <h3>{selected["Element"]}</h3>
+        <p>Atomic Number: {selected["Atomic Number"]}</p>
+        <p>Standard Atomic Mass: {selected["Atomic Mass"]}</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+# -----------------------------------
+# MOLECULAR CALCULATOR PAGE
+# -----------------------------------
+elif page == "Molecular Calculator":
+
+    st.markdown("""
+    <div class="hero">
+        <div class="eyebrow">Molecular analysis tools</div>
+        <h1>🧬 Molecular Calculator</h1>
+        <p>Calculate molecular mass from a simple chemical formula.</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    st.info(
+        "Enter a formula using element symbols and numbers, "
+        "such as H2O, CO2, or NaCl. Parentheses are not supported."
+    )
+
+    atomic_masses = {
+        "H": 1.008,
+        "He": 4.0026,
+        "Li": 6.94,
+        "Be": 9.0122,
+        "B": 10.81,
+        "C": 12.011,
+        "N": 14.007,
+        "O": 15.999,
+        "F": 18.998,
+        "Ne": 20.180,
+        "Na": 22.990,
+        "Mg": 24.305,
+        "Al": 26.982,
+        "Si": 28.085,
+        "P": 30.974,
+        "S": 32.06,
+        "Cl": 35.45,
+        "Ar": 39.948,
+        "K": 39.098,
+        "Ca": 40.078,
+        "Fe": 55.845,
+        "Cu": 63.546,
+        "Zn": 65.38,
+        "Ag": 107.868,
+        "I": 126.904,
+        "Ba": 137.327,
+        "Au": 196.967,
+        "Hg": 200.592,
+        "Pb": 207.2
+    }
+
+    formula = st.text_input(
+        "Chemical Formula",
+        placeholder="Example: H2O"
+    )
+
+    if st.button("Calculate Molecular Mass", type="primary"):
+
+        import re
+
+        if not formula:
+            st.warning("Please enter a chemical formula.")
+
+        else:
+            tokens = re.findall(r"[A-Z][a-z]?|[0-9]+", formula)
+
+            reconstructed = "".join(tokens)
+
+            if reconstructed != formula or not tokens:
+                st.error(
+                    "Invalid formula format. Use element symbols "
+                    "and numbers only, without spaces or parentheses."
+                )
+
+            else:
+                mass = 0.0
+                composition = {}
+                i = 0
+                valid = True
+
+                while i < len(tokens):
+                    symbol = tokens[i]
+
+                    if symbol not in atomic_masses:
+                        st.error(
+                            f"Atomic mass data is unavailable for {symbol}."
+                        )
+                        valid = False
+                        break
+
+                    count = 1
+
+                    if i + 1 < len(tokens) and tokens[i + 1].isdigit():
+                        count = int(tokens[i + 1])
+                        i += 1
+
+                    if count <= 0:
+                        st.error("Atom counts must be greater than zero.")
+                        valid = False
+                        break
+
+                    mass += atomic_masses[symbol] * count
+                    composition[symbol] = (
+                        composition.get(symbol, 0) + count
+                    )
+
+                    i += 1
+
+                if valid:
+                    st.success("Calculation completed successfully!")
+
+                    col1, col2 = st.columns(2)
+
+                    col1.metric(
+                        "Molecular Mass",
+                        f"{mass:.4f} g/mol"
+                    )
+
+                    col2.metric(
+                        "Unique Elements",
+                        str(len(composition))
+                    )
+
+                    st.subheader("Element Composition")
+
+                    result_df = pd.DataFrame([
+                        {
+                            "Element": symbol,
+                            "Atom Count": count,
+                            "Atomic Mass": atomic_masses[symbol],
+                            "Contribution (g/mol)": (
+                                atomic_masses[symbol] * count
+                            )
+                        }
+                        for symbol, count in composition.items()
+                    ])
+
+                    st.dataframe(
+                        result_df,
+                        use_container_width=True,
+                        hide_index=True
+                    )
+
+                    st.caption(
+                        "This calculator supports simple formulas only. "
+                        "It does not interpret parentheses, hydrates, "
+                        "ionic charges, or complex formula notation."
+                    )
+
+# -----------------------------------
+# ABOUT PAGE
+# -----------------------------------
+elif page == "About":
+
+    st.markdown("""
+    <div class="hero">
+        <div class="eyebrow">Project information</div>
+        <h1>📘 About Cheminformatics</h1>
+        <p>Connecting chemistry and computational science.</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    st.subheader("What is Cheminformatics?")
+
+    st.write("""
+    Cheminformatics is the application of computer science,
+    data analysis, and information technology to chemical research.
+
+    It helps researchers organize chemical information, study
+    molecular structures, analyze chemical properties, and
+    support drug discovery.
+    """)
+
+    st.subheader("Project Features")
+
+    st.markdown("""
+    - **Periodic Table:** Search and explore selected chemical elements.
+    - **Molecular Calculator:** Calculate approximate molecular masses.
+    - **Interactive Interface:** Navigate between the project's modules.
+    - **Student Profile:** Display the student's name and registration number.
+    """)
+
+    st.subheader("Student Details")
+
+    st.markdown("""
+    <div class="section-card">
+        <p><b>Student Name:</b> RATHIESH D</p>
+        <p><b>Registration Number:</b> RE2611026050338</p>
+        <p><b>Project Title:</b> Cheminformatics</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    st.subheader("Conclusion")
+
+    st.write("""
+    This project demonstrates how computational tools can make
+    chemical information easier to explore and understand.
+    It provides a starting point for learning about chemical
+    data, molecular mass calculations, and digital chemistry.
+    """)
+
+# -----------------------------------
 # FOOTER
-# --------------------------------------------------
-
+# -----------------------------------
 st.markdown("---")
 
-st.markdown(
-    f"""
-    <div style="text-align:center; padding:1rem; color:#b8c8dc;">
-        <p>⚛️ Cheminformatics | 2D + 3D Molecular Explorer</p>
-        <p>Created by <b>{STUDENT_NAME}</b></p>
-        <p>Registration Number: {REGISTRATION_NUMBER}</p>
-        <p>Powered by RDKit, Streamlit, PubChem and 3Dmol.js</p>
-    </div>
-    """,
-    unsafe_allow_html=True
-)
-
+st.markdown("""
+<div style="text-align:center; color:#91a7c2; padding:15px;">
+    ⚛️ Cheminformatics Workspace
+    <br>
+    Student Project | RATHIESH D
+    <br>
+    Registration Number: RE2611026050338
+</div>
+""", unsafe_allow_html=True)
+```
