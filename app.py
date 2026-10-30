@@ -1,4 +1,4 @@
-```python
+
 import streamlit as st
 import pandas as pd
 
@@ -500,4 +500,3 @@ st.markdown("""
     Registration Number: RE2611026050338
 </div>
 """, unsafe_allow_html=True)
-```
