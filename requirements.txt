@@ -1,5 +1,6 @@
 streamlit>=1.40
 rdkit==2026.9.1
 pandas
-requests
+request 
 py3Dmol
+stmol
